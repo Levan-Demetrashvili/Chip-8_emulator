@@ -1,4 +1,5 @@
 // #include <cs50.h>
+#include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -220,6 +221,7 @@ void emulate_cycle(CHIP8 *chip8, uint16_t opcode) {
             }
             break;
         case 0x9000:
+            printf("0x9\n");
             if (chip8->registers[x] != chip8->registers[y]) chip8->pc += 2;
             break;
         case 0xA000:
@@ -271,7 +273,35 @@ void emulate_cycle(CHIP8 *chip8, uint16_t opcode) {
                     printf("0xF_07\n");
                     chip8->registers[x] = 0; 
                     break;
-
+                
+                case 0xF01E:
+                    printf("0xF_1E\n");
+                    chip8->I += chip8->registers[x];
+                    break;
+                
+                case 0xF033:
+                    printf("0xF_33\n");
+                    chip8->memory[chip8->I] = chip8->registers[x] / 100;
+                    chip8->memory[chip8->I + 1] = (chip8->registers[x] / 10) % 10;
+                    chip8->memory[chip8->I + 2] = chip8->registers[x] % 10;
+                    break;
+                
+                case 0xF055:
+                    printf("0xF_55\n");
+                    for (int i = 0; i <= x; i++) {
+                        chip8->memory[chip8->I + i] = chip8->registers[i];
+                    }
+                    if (chip8->legacy_version) chip8->I = chip8->I + x + 1;
+                    break;
+                
+                case 0xF065:
+                    printf("0xF_65\n");
+                    for (int i = 0; i <= x; i++) {
+                        chip8->registers[i] = chip8->memory[chip8->I + i];
+                    }
+                    if (chip8->legacy_version) chip8->I = chip8->I + x + 1;
+                    break;
+                
                 default:
                     printf("UNHANDLED OPCODE: 0x%04X at PC: 0x%03X\n", opcode, chip8->pc - 2);
                     break;
