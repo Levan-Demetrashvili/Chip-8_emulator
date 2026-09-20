@@ -1,47 +1,7 @@
-// #include <cs50.h>
-#include <math.h>
-#include <stdbool.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include "helper.h"
 
-typedef struct {
-	uint8_t memory[4096];
-	uint8_t registers[16];
-	uint16_t I;
-	uint16_t pc;
-	uint16_t stack[16];
-	uint16_t sp;
-	uint8_t delay_timer;
-	uint8_t sound_timer;
-	uint8_t screen[32][64];
-	bool keypad[16];
-	bool legacy_version;
-} CHIP8;
-
-const uint8_t FONTSET[80] = {
-	0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
-	0x20, 0x60, 0x20, 0x20, 0x70, // 1
-	0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
-	0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
-	0x90, 0x90, 0xF0, 0x10, 0x10, // 4
-	0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
-	0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6
-	0xF0, 0x10, 0x20, 0x40, 0x40, // 7
-	0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
-	0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
-	0xF0, 0x90, 0xF0, 0x90, 0x90, // A
-	0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
-	0xF0, 0x80, 0x80, 0x80, 0xF0, // C
-	0xE0, 0x90, 0x90, 0x90, 0xE0, // D
-	0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
-	0xF0, 0x80, 0xF0, 0x80, 0x80  // F
-};
 
 void emulate_cycle(CHIP8 *chip8, uint16_t opcode);
-void chip8_init(CHIP8 *chip8);
-int endsWith(const char *str, const char *suffix);
 
 int main(int argc, char *argv[]) {
 
@@ -49,37 +9,43 @@ int main(int argc, char *argv[]) {
 		printf("Usage: ./emulator.exe *.ch8\n");
 		return 1;
 	}
+   
+
+    GraphicsContext gfx = set_up_SDL("CHIP8 Emulator", 640, 320);
+    if (!gfx.success) {
+        return 5;
+    }
 
 	CHIP8 chip8;
 	chip8_init(&chip8);
+    load_ROM(&chip8, argv[1]);
+	
+    SDL_Event event;
+    bool running = true;
+	while (running) {
+        while (SDL_PollEvent(&event)) {
+            if(event.type == SDL_EVENT_QUIT) running = false;
+        }
 
-	FILE *src = fopen(argv[1], "rb");
-	if (src == NULL) {
-		printf("Cannot read the file\n");
-		return 2;
-	}
-
-	uint8_t instruction_buffer[2];
-
-	// Load the ROM
-	while (fread(instruction_buffer, sizeof(uint8_t), 2, src) != 0) {
-		chip8.memory[chip8.pc] = instruction_buffer[0];
-		chip8.memory[chip8.pc + 1] = instruction_buffer[1];
-		chip8.pc += 2;
-	}
-	chip8.pc = 0x200;
-
-	while (true) {
 		if (chip8.pc > 0xFFF) {
 			printf("Out of bound error");
 			return 3;
 		}
+
 		uint16_t opcode =
 			(chip8.memory[chip8.pc] << 8) | chip8.memory[chip8.pc + 1];
 		chip8.pc += 2;
-
+        
 		emulate_cycle(&chip8, opcode);
+        
+
+   
 	}
+    SDL_DestroyRenderer(gfx.renderer);
+    SDL_DestroyWindow(gfx.window);
+    SDL_Quit();
+
+    return 0;
 }
 
 void emulate_cycle(CHIP8 *chip8, uint16_t opcode) {
@@ -95,6 +61,7 @@ void emulate_cycle(CHIP8 *chip8, uint16_t opcode) {
                 case 0x00E0:
                     printf("0x0__0\n");
                     memset(chip8->screen, 0, sizeof(chip8->screen));
+                    chip8->draw_flag = true;
                     break;
                 case 0x00EE:
                     printf("0x0__E\n");
@@ -191,7 +158,7 @@ void emulate_cycle(CHIP8 *chip8, uint16_t opcode) {
                     } else {
                         // Newer Systems
                         chip8->registers[0xF] = chip8->registers[x] & 0x0001;
-                        chip8->registers[x] = chip8->registers[x] >> 1;
+                        chip8->registers[x] >>= 1;
                     }
                     break;
 
@@ -211,7 +178,7 @@ void emulate_cycle(CHIP8 *chip8, uint16_t opcode) {
                     } else {
                         // Newer Systems
                         chip8->registers[0xF] = (chip8->registers[x] & 0x80) >> 7;
-                        chip8->registers[x] = chip8->registers[x] << 1;
+                        chip8->registers[x] <<=  1;
                     }
                     break;
 
@@ -231,52 +198,99 @@ void emulate_cycle(CHIP8 *chip8, uint16_t opcode) {
 
         case 0xB000:
             printf("0xB\n");
-            if (chip8->legacy_version) {
-                // Older Systems
-                chip8->pc = nnn + chip8->registers[0];
-            }  else {
-                // Newer Systems
-                chip8->pc = nnn + chip8->registers[x];
-            }
+            chip8->pc = nnn + chip8->registers[0];
             break;
         case 0xC000:
             printf("0xC\n");
             chip8->registers[x] = (rand() % 256) & kk;
             break;
+        
+        case 0xD000: {
+            printf("0xD\n");
+            chip8->registers[0xF] = 0; 
+            uint8_t reg_y = chip8->registers[y] % 32, reg_x = chip8->registers[x] % 64;
+            chip8->draw_flag = true;
 
-        case 0xE000:
+            // Draw byte
+            for (int i = 0; i < n; i++) {
+                uint8_t sprite_byte = chip8->memory[chip8->I + i];
+                uint8_t screen_y = reg_y + i;
+                if (screen_y >= 32 ) break;
+                
+                // Draw pixel of byte
+                for (int j = 0; j < 8; j++) {
+                    uint8_t pixel = (sprite_byte >> (7 - j)) & 0x1;
+                    uint8_t screen_x = reg_x + j;
+                    if (screen_x >= 64 ) break;
+
+                    if (pixel == 1 && chip8->screen[screen_y][screen_x] == 1) {
+                        chip8->registers[0xF] = 1;
+                    }
+
+                    chip8->screen[screen_y][screen_x] ^=  pixel;
+                }
+            }
+            break;
+        }
+
+        case 0xE000: {
+            uint8_t reg_x = chip8->registers[x];
             switch (opcode & 0xF0FF) {
                 case 0xE09E:
-                    printf("0x0xE_9E\n");
-                    uint8_t reg_x1 = chip8->registers[x];    
-                    if (reg_x1 >= 0 && reg_x1 <= 15 && chip8->keypad[reg_x1]) {
-                        chip8->pc += 2;
-                    }
+                    printf("0x0xE_9E\n");  
+                    if (reg_x <= 15 && chip8->keypad[reg_x]) chip8->pc += 2;
                     break;
 
                 case 0xE0A1:
                     printf("0x0xE_A1\n");
-                    uint8_t reg_x2 = chip8->registers[x];    
-                    if (reg_x2 >= 0 && reg_x2 <= 15 && !chip8->keypad[reg_x2]) {
-                        chip8->pc += 2;
-                    }
+                    chip8->keypad[chip8->registers[x]] = 1;
+                    if (reg_x <= 15 && !chip8->keypad[reg_x]) chip8->pc += 2;
                     break;
 
                 default:
                     break;
             }
             break;
+        }
 
         case 0xF000:
             switch (opcode & 0xF0FF) {
                 case 0xF007:
                     printf("0xF_07\n");
-                    chip8->registers[x] = 0; 
+                    chip8->registers[x] = chip8->delay_timer;
+                    break;
+
+                  case 0xF00A:
+                    printf("0xF_0A\n");
+                    bool key_pressed = false;
+                    for (int i = 0; i < 16; i++) {
+                        if (chip8->keypad[i]) {
+                            chip8->registers[x] = i;
+                            key_pressed = true;
+                            break;
+                        }
+                    }
+                    if (!key_pressed) chip8->pc -= 2;
+                    break;
+
+                case 0xF015:
+                    printf("0xF_15\n");
+                    chip8->delay_timer = chip8->registers[x];
+                    break;
+                
+                case 0xF018:
+                    printf("0xF_18\n");
+                    chip8->sound_timer = chip8->registers[x];
                     break;
                 
                 case 0xF01E:
                     printf("0xF_1E\n");
                     chip8->I += chip8->registers[x];
+                    break;
+
+                case 0xF029:
+                    printf("0xF_29\n");
+                        chip8->I = FONTSET_START + (chip8->registers[x] & 0x0F) * 5;
                     break;
                 
                 case 0xF033:
@@ -314,22 +328,5 @@ void emulate_cycle(CHIP8 *chip8, uint16_t opcode) {
         }
 }
 
-void chip8_init(CHIP8 *chip8) {
-	memset(chip8, 0, sizeof(CHIP8));
-	chip8->pc = 0x200;
-	chip8->legacy_version = false;
 
-	for (int i = 0; i < 80; i++) {
-		chip8->memory[0x50 + i] = FONTSET[i];
-	}
-}
 
-int endsWith(const char *str, const char *suffix) {
-	if (!str || !suffix)
-		return 0;
-	size_t lenstr = strlen(str);
-	size_t lensuffix = strlen(suffix);
-	if (lensuffix > lenstr)
-		return 0;
-	return strncmp(str + lenstr - lensuffix, suffix, lensuffix) == 0;
-}
