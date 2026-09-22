@@ -1,5 +1,7 @@
 #include "helper.h"
+#include <inttypes.h>
 
+const int FRAME_TIME_MS = 1000 / 60;
 
 void emulate_cycle(CHIP8 *chip8, uint16_t opcode);
 
@@ -11,7 +13,8 @@ int main(int argc, char *argv[]) {
 	}
    
 
-    GraphicsContext gfx = set_up_SDL("CHIP8 Emulator", 640, 320);
+    GraphicsContext gfx = set_up_SDL("CHIP8 Emulator", SCREEN_WIDTH * SCALE, SCREEN_HEIGHT * SCALE);
+
     if (!gfx.success) {
         return 5;
     }
@@ -21,10 +24,16 @@ int main(int argc, char *argv[]) {
     load_ROM(&chip8, argv[1]);
 	
     SDL_Event event;
+    uint32_t last_frame_time = SDL_GetTicks();
     bool running = true;
+
 	while (running) {
         while (SDL_PollEvent(&event)) {
-            if(event.type == SDL_EVENT_QUIT) running = false;
+            if(event.type == SDL_EVENT_QUIT) {
+                running = false;
+                break;
+            }
+            handle_input(&chip8, event);   
         }
 
 		if (chip8.pc > 0xFFF) {
@@ -32,15 +41,26 @@ int main(int argc, char *argv[]) {
 			return 3;
 		}
 
+        // Emulate one instruction
 		uint16_t opcode =
 			(chip8.memory[chip8.pc] << 8) | chip8.memory[chip8.pc + 1];
 		chip8.pc += 2;
         
 		emulate_cycle(&chip8, opcode);
         
-
+        if (SDL_GetTicks() -  last_frame_time > FRAME_TIME_MS) {
+            update_timers(&chip8);
+            // Draw on screen
+            if(chip8.draw_flag) {
+                draw_graphics(&chip8, &gfx);
+                chip8.draw_flag = false;
+            }
+            last_frame_time += FRAME_TIME_MS;
+            SDL_Delay(1);
+        }      
    
 	}
+    SDL_DestroyTexture(gfx.texture);
     SDL_DestroyRenderer(gfx.renderer);
     SDL_DestroyWindow(gfx.window);
     SDL_Quit();
@@ -208,20 +228,20 @@ void emulate_cycle(CHIP8 *chip8, uint16_t opcode) {
         case 0xD000: {
             printf("0xD\n");
             chip8->registers[0xF] = 0; 
-            uint8_t reg_y = chip8->registers[y] % 32, reg_x = chip8->registers[x] % 64;
+            uint8_t reg_y = chip8->registers[y] % SCREEN_HEIGHT, reg_x = chip8->registers[x] % SCREEN_WIDTH;
             chip8->draw_flag = true;
 
             // Draw byte
             for (int i = 0; i < n; i++) {
                 uint8_t sprite_byte = chip8->memory[chip8->I + i];
                 uint8_t screen_y = reg_y + i;
-                if (screen_y >= 32 ) break;
+                if (screen_y >= SCREEN_HEIGHT ) break;
                 
                 // Draw pixel of byte
                 for (int j = 0; j < 8; j++) {
                     uint8_t pixel = (sprite_byte >> (7 - j)) & 0x1;
                     uint8_t screen_x = reg_x + j;
-                    if (screen_x >= 64 ) break;
+                    if (screen_x >= SCREEN_WIDTH ) break;
 
                     if (pixel == 1 && chip8->screen[screen_y][screen_x] == 1) {
                         chip8->registers[0xF] = 1;
@@ -243,7 +263,6 @@ void emulate_cycle(CHIP8 *chip8, uint16_t opcode) {
 
                 case 0xE0A1:
                     printf("0x0xE_A1\n");
-                    chip8->keypad[chip8->registers[x]] = 1;
                     if (reg_x <= 15 && !chip8->keypad[reg_x]) chip8->pc += 2;
                     break;
 

@@ -1,5 +1,3 @@
 .vscode
 .clang-format
-*.ch8
 *.exe
-*.txt
