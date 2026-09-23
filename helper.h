@@ -31,6 +31,8 @@ typedef struct {
     bool keypad[16];
     bool legacy_version;
     bool draw_flag;
+    bool waiting_for_key_release;
+    int8_t key_to_release;
 } CHIP8;
 
 typedef struct {
@@ -41,15 +43,14 @@ typedef struct {
 } GraphicsContext;
 
 extern const uint8_t FONTSET[];
-extern const uint8_t KEYPAD_MAPPING[];
+extern const SDL_Scancode KEYPAD_MAPPING[];
 
 GraphicsContext set_up_SDL(const char* title, int width, int height);
 void chip8_init(CHIP8 *chip8);
 void load_ROM(CHIP8 *chip8, const char *filename);
-void chip8_print_screen_ascii(CHIP8 *chip8);
-void update_timers(CHIP8 *chip8);
 void draw_graphics(CHIP8 *chip8, GraphicsContext *gfx);
-void handle_input(CHIP8 *chip8, SDL_Event event);
+void handle_input(CHIP8 *chip8);
+void update_timers(CHIP8 *chip8);
 int endsWith(const char *str, const char *suffix);
 
 #endif 

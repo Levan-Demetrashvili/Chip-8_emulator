@@ -1,26 +1,42 @@
 #include "helper.h"
 
 const uint8_t FONTSET[] = {
-	0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
-	0x20, 0x60, 0x20, 0x20, 0x70, // 1
-	0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
-	0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
-	0x90, 0x90, 0xF0, 0x10, 0x10, // 4
-	0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
-	0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6
-	0xF0, 0x10, 0x20, 0x40, 0x40, // 7
-	0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
-	0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
-	0xF0, 0x90, 0xF0, 0x90, 0x90, // A
-	0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
-	0xF0, 0x80, 0x80, 0x80, 0xF0, // C
-	0xE0, 0x90, 0x90, 0x90, 0xE0, // D
-	0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
-	0xF0, 0x80, 0xF0, 0x80, 0x80  // F
+
+	0xF0, 0x90, 0x90, 0x90, 0xF0, 
+	0x20, 0x60, 0x20, 0x20, 0x70, 
+	0xF0, 0x10, 0xF0, 0x80, 0xF0, 
+	0xF0, 0x10, 0xF0, 0x10, 0xF0, 
+	0x90, 0x90, 0xF0, 0x10, 0x10, 
+	0xF0, 0x80, 0xF0, 0x10, 0xF0, 
+	0xF0, 0x80, 0xF0, 0x90, 0xF0, 
+	0xF0, 0x10, 0x20, 0x40, 0x40, 
+	0xF0, 0x90, 0xF0, 0x90, 0xF0, 
+	0xF0, 0x90, 0xF0, 0x10, 0xF0, 
+	0xF0, 0x90, 0xF0, 0x90, 0x90, 
+	0xE0, 0x90, 0xE0, 0x90, 0xE0, 
+	0xF0, 0x80, 0x80, 0x80, 0xF0, 
+	0xE0, 0x90, 0x90, 0x90, 0xE0, 
+	0xF0, 0x80, 0xF0, 0x80, 0xF0, 
+	0xF0, 0x80, 0xF0, 0x80, 0x80  
 };
- const uint8_t KEYPAD_MAPPING[] = {
- '1','2', '3', '4','q', 'w', 'e','r','a','s','d','f','z','x','c','v'
- };
+const SDL_Scancode KEYPAD_MAPPING[16] = {
+    SDL_SCANCODE_X, 
+    SDL_SCANCODE_1, 
+    SDL_SCANCODE_2, 
+    SDL_SCANCODE_3, 
+    SDL_SCANCODE_Q, 
+    SDL_SCANCODE_W, 
+    SDL_SCANCODE_E, 
+    SDL_SCANCODE_A, 
+    SDL_SCANCODE_S, 
+    SDL_SCANCODE_D, 
+    SDL_SCANCODE_Z, 
+    SDL_SCANCODE_C, 
+    SDL_SCANCODE_4, 
+    SDL_SCANCODE_R, 
+    SDL_SCANCODE_F, 
+    SDL_SCANCODE_V  
+};
 const int INSTRUCTION_SIZE = 2;
 
 GraphicsContext set_up_SDL(const char *title, int width, int height) {
@@ -31,7 +47,7 @@ GraphicsContext set_up_SDL(const char *title, int width, int height) {
 		.success = false,
 	};
 
-	if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)) {
+	if (!SDL_Init(SDL_INIT_VIDEO)) {
 		SDL_Log("Unable to initialize SDL_Video: %s", SDL_GetError());
 		SDL_Quit();
 	}
@@ -41,6 +57,7 @@ GraphicsContext set_up_SDL(const char *title, int width, int height) {
 		SDL_Log("Unable to create SDL window and renderer: %s", SDL_GetError());
 		SDL_Quit();
 	}
+        
 	ctx.success = true;
 	return ctx;
 }
@@ -48,7 +65,8 @@ GraphicsContext set_up_SDL(const char *title, int width, int height) {
 void chip8_init(CHIP8 *chip8) {
 	memset(chip8, 0, sizeof(CHIP8));
 	chip8->pc = PC_START;
-	chip8->legacy_version = false;
+	chip8->legacy_version = true;
+    chip8->key_to_release = -1;
 
 	for (int i = 0; i < FONTSET_LENGTH; i++) {
 		chip8->memory[FONTSET_START + i] = FONTSET[i];
@@ -80,21 +98,7 @@ void load_ROM(CHIP8 *chip8, const char *filename) {
 
 	chip8->pc = PC_START;
 }
-void chip8_print_screen_ascii(CHIP8 *chip8) {
-	for (int y = 0; y < SCREEN_HEIGHT; y++) {
-		for (int x = 0; x < SCREEN_WIDTH; x++) {
-			putchar(chip8->screen[y][x] ? '#' : ' ');
-		}
-		printf("\n");
-	}
-}
 
-void update_timers(CHIP8 *chip8) {
-	if (chip8->delay_timer > 0)
-		chip8->delay_timer-- ;
-	if (chip8->sound_timer > 0)
-		chip8->sound_timer--;
-}
 
 void draw_graphics(CHIP8 *chip8, GraphicsContext *gfx) {
     uint32_t pixels[SCREEN_HEIGHT][SCREEN_WIDTH];
@@ -117,9 +121,20 @@ void draw_graphics(CHIP8 *chip8, GraphicsContext *gfx) {
 	SDL_RenderPresent(gfx->renderer);
 }
 
-void handle_input(CHIP8 *chip8, SDL_Event event) {
-   printf("TODO\n");
+void handle_input(CHIP8 *chip8) {
+   const bool *keystates = SDL_GetKeyboardState(NULL);
+   for (int i = 0; i < 16; i++) {
+        SDL_Scancode scancode = KEYPAD_MAPPING[i];
+        chip8->keypad[i] = keystates[scancode] ? 1 : 0;
+   }
+
 }
+
+void update_timers(CHIP8 *chip8) {
+	if (chip8->delay_timer > 0) chip8->delay_timer--;
+	if (chip8->sound_timer > 0) chip8->sound_timer--;
+}
+
 
 int endsWith(const char *str, const char *suffix) {
 	if (!str || !suffix)
