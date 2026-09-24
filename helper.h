@@ -1,7 +1,6 @@
 #ifndef HELPER_H
 #define HELPER_H
 
-
 #include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -46,11 +45,12 @@ extern const uint8_t FONTSET[];
 extern const SDL_Scancode KEYPAD_MAPPING[];
 
 GraphicsContext set_up_SDL(const char* title, int width, int height);
-void chip8_init(CHIP8 *chip8);
+void chip8_init(CHIP8 *chip8, bool is_legacy);
 void load_ROM(CHIP8 *chip8, const char *filename);
 void draw_graphics(CHIP8 *chip8, GraphicsContext *gfx);
 void handle_input(CHIP8 *chip8);
 void update_timers(CHIP8 *chip8);
 int endsWith(const char *str, const char *suffix);
+
 
 #endif 

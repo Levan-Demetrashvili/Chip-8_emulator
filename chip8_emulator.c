@@ -2,17 +2,19 @@
 #include <inttypes.h>
 
 const int FRAME_TIME_MS = 1000 / 60;
-const int CYCLES_PER_FRAME = 10;
+const int CYCLES_PER_FRAME = 15;
 
 void emulate_cycle(CHIP8 *chip8, uint16_t opcode);
 
 int main(int argc, char *argv[]) {
-
-	if (argc != 2 || !endsWith(argv[1], ".ch8")) {
-		printf("Usage: ./emulator.exe *.ch8\n");
+    bool is_legacy = false;
+	if ((argc != 2 && argc != 3) || !endsWith(argv[1], ".ch8")) {
+		printf("Usage: ./emulator.exe <file.ch8> [is_legacy=0]\n");
 		return 1;
 	}
-   
+    if (argc == 3 && strcmp(argv[2], "1") == 0) {
+        is_legacy = true;
+    }
 
     GraphicsContext gfx = set_up_SDL("CHIP8 Emulator", SCREEN_WIDTH * SCALE, SCREEN_HEIGHT * SCALE);
 
@@ -21,7 +23,7 @@ int main(int argc, char *argv[]) {
     }
 
 	CHIP8 chip8;
-	chip8_init(&chip8);
+	chip8_init(&chip8,is_legacy);
     load_ROM(&chip8, argv[1]);
 	
     SDL_Event event;
@@ -35,28 +37,39 @@ int main(int argc, char *argv[]) {
                 break;
             }
         }
-
-		if (chip8.pc > 0xFFF) {
-			printf("Out of bound error");
-			return 3;
-		}
         
         handle_input(&chip8);   
-
         
-        uint16_t opcode = (chip8.memory[chip8.pc] << 8) | chip8.memory[chip8.pc + 1];
-                chip8.pc += 2;
-        emulate_cycle(&chip8, opcode);
-               
         
         if (SDL_GetTicks() -  last_frame_time > FRAME_TIME_MS) {
+            for (int i = 0; i < CYCLES_PER_FRAME; i++) {
+
+                if (chip8.pc >= 0xFFF) {
+                    printf("Out of bound error");
+                    return 3;
+                }
+
+                uint16_t opcode = (chip8.memory[chip8.pc] << 8) | chip8.memory[chip8.pc + 1];
+                chip8.pc += 2;
+                emulate_cycle(&chip8, opcode);
+
+                if(chip8.draw_flag) {
+                    if (chip8.legacy_version) break;
+                    else {
+                        draw_graphics(&chip8, &gfx);
+                        chip8.draw_flag = false;
+                    }
+                } 
+              
+            }
             
             update_timers(&chip8);
 
-            if(chip8.draw_flag) {
-                draw_graphics(&chip8, &gfx);
-                chip8.draw_flag = false;
+            if(chip8.draw_flag && chip8.legacy_version) {
+                    draw_graphics(&chip8, &gfx);
+                    chip8.draw_flag = false;
             }
+            
             last_frame_time += FRAME_TIME_MS;
             SDL_Delay(1);
         }      
@@ -227,7 +240,7 @@ void emulate_cycle(CHIP8 *chip8, uint16_t opcode) {
 
         case 0xB000:
             // printf("0xB\n");
-            chip8->pc = nnn + chip8->registers[0];
+            chip8->pc = chip8->legacy_version ?  nnn + chip8->registers[0]: nnn + chip8->registers[x];
             break;
         case 0xC000:
             // printf("0xC\n");
@@ -297,7 +310,6 @@ void emulate_cycle(CHIP8 *chip8, uint16_t opcode) {
                                 break;
                             }
                         }
-
                         chip8->pc -= 2;
                     } 
                     else {
@@ -312,7 +324,7 @@ void emulate_cycle(CHIP8 *chip8, uint16_t opcode) {
                             chip8->pc -= 2;
                         }
                     }   
-                
+                    break;
                     
                     
 

@@ -50,22 +50,35 @@ GraphicsContext set_up_SDL(const char *title, int width, int height) {
 	if (!SDL_Init(SDL_INIT_VIDEO)) {
 		SDL_Log("Unable to initialize SDL_Video: %s", SDL_GetError());
 		SDL_Quit();
+        return ctx;
 	}
 
 	if (!SDL_CreateWindowAndRenderer(title, width, height, SDL_WINDOW_RESIZABLE,
 									 &ctx.window, &ctx.renderer)) {
 		SDL_Log("Unable to create SDL window and renderer: %s", SDL_GetError());
 		SDL_Quit();
+        return ctx;
 	}
+
+    SDL_SetRenderLogicalPresentation(ctx.renderer, SCREEN_WIDTH, SCREEN_HEIGHT,SDL_LOGICAL_PRESENTATION_LETTERBOX);
+	
+    ctx.texture =  SDL_CreateTexture(ctx.renderer, SDL_PIXELFORMAT_RGBA8888,
+						  SDL_TEXTUREACCESS_STREAMING, SCREEN_WIDTH, SCREEN_HEIGHT);
+    if (!ctx.texture) {
+        SDL_Log("Unable to create SDL texture: %s", SDL_GetError());
+		SDL_Quit();
+        return ctx;
+    }
+    SDL_SetTextureScaleMode(ctx.texture,SDL_SCALEMODE_NEAREST);
         
 	ctx.success = true;
 	return ctx;
 }
 
-void chip8_init(CHIP8 *chip8) {
+void chip8_init(CHIP8 *chip8, bool is_legacy) {
 	memset(chip8, 0, sizeof(CHIP8));
 	chip8->pc = PC_START;
-	chip8->legacy_version = true;
+	chip8->legacy_version = is_legacy;
     chip8->key_to_release = -1;
 
 	for (int i = 0; i < FONTSET_LENGTH; i++) {
@@ -101,21 +114,18 @@ void load_ROM(CHIP8 *chip8, const char *filename) {
 
 
 void draw_graphics(CHIP8 *chip8, GraphicsContext *gfx) {
-    uint32_t pixels[SCREEN_HEIGHT][SCREEN_WIDTH];
-
-	SDL_SetRenderLogicalPresentation(gfx->renderer, SCREEN_WIDTH, SCREEN_HEIGHT,SDL_LOGICAL_PRESENTATION_LETTERBOX);
-	
-    gfx->texture =  SDL_CreateTexture(gfx->renderer, SDL_PIXELFORMAT_RGBA8888,
-						  SDL_TEXTUREACCESS_STREAMING, SCREEN_WIDTH, SCREEN_HEIGHT);
-
-    SDL_SetTextureScaleMode(gfx->texture,SDL_SCALEMODE_NEAREST);
+    void *pixels;
+    int pitch;
+    SDL_LockTexture(gfx->texture, NULL, &pixels, &pitch);
 
 	for (int i = 0; i < SCREEN_HEIGHT; i++) {
+        uint32_t *row = (uint32_t *)((uint8_t *)pixels + i * pitch);
+
         for (int j = 0; j < SCREEN_WIDTH; j++) {
-            pixels[i][j] = chip8->screen[i][j] ? 0xFFFFFFFF: 0x000000FF; 
+            row[j] = chip8->screen[i][j] ? 0xFFFFFFFF: 0x000000FF; 
         }
     }
-    SDL_UpdateTexture(gfx->texture,NULL,pixels,SCREEN_WIDTH * sizeof(uint32_t));
+    SDL_UnlockTexture(gfx->texture);
     SDL_RenderClear(gfx->renderer);
     SDL_RenderTexture(gfx->renderer,gfx->texture,NULL,NULL);
 	SDL_RenderPresent(gfx->renderer);
@@ -145,3 +155,4 @@ int endsWith(const char *str, const char *suffix) {
 		return 0;
 	return strncmp(str + lenstr - lensuffix, suffix, lensuffix) == 0;
 }
+
